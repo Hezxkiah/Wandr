@@ -136,7 +136,7 @@ export default function MapPage() {
               onClick={chooseRoute}
               className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800"
             >
-              go on a walk
+              let's go!
             </button>
           </div>
         </aside>
