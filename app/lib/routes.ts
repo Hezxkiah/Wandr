@@ -3,6 +3,8 @@ export type RouteInstruction = {
   distance?: number;
   time?: number;
   street_name?: string;
+  interval?: [number, number];
+  sign?: number;
 };
 
 export type WandrRoute = {
@@ -23,6 +25,7 @@ export type WandrRoute = {
     within_time_limit: boolean;
     points: number;
     low_traffic_percent: number;
+    scenery?: { score: number; nearby_percent: Record<string, number> } | null;
     instructions: RouteInstruction[];
   };
 };

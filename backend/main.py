@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from scenery import index as scenery_index
 
 
 GRAPHHOPPER_URL = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989").rstrip("/")
@@ -223,6 +224,7 @@ def feature_from_path(
             "within_time_limit": duration_minutes <= request.target_minutes + 0.5,
             "points": len(coordinates),
             "low_traffic_percent": low_traffic_percent(path, coordinates),
+            "scenery": scenery_index.score(coordinates),
             "instructions": path.get("instructions", []),
         },
     }
@@ -326,10 +328,25 @@ async def create_route(request: RouteRequest) -> dict[str, Any]:
     if not unique_paths:
         raise HTTPException(status_code=502, detail="GraphHopper returned no route")
 
-    ranked_paths = sorted(
-        unique_paths,
-        key=lambda path: route_sort_key(path, request.target_minutes),
-    )[:3]
+    # Prefer routes within the requested time; balance scenery, time fit and
+    # approximate overlap within that group. Unknown scenery is neutral.
+    remaining = [(path, scenery_index.score(path["points"]["coordinates"])) for path in unique_paths]
+    ranked_paths = []
+    used_cells: set[tuple[int, int]] = set()
+    while remaining and len(ranked_paths) < 3:
+        def rank(candidate):
+            path, scenic = candidate
+            coords = path["points"]["coordinates"]
+            cells = {(round(p[0] * 2000), round(p[1] * 2000)) for p in coords}
+            overlap = len(cells & used_cells) / max(len(cells), 1)
+            over, gap = route_sort_key(path, request.target_minutes)
+            time_fit = max(0, 1 - gap / max(request.target_minutes, 1))
+            scenic_fit = scenic["score"] / 100 if scenic else 0.5
+            return (not over, 0.6 * time_fit + 0.4 * scenic_fit - 0.15 * overlap)
+        selected = max(remaining, key=rank)
+        remaining.remove(selected)
+        ranked_paths.append(selected[0])
+        used_cells.update((round(p[0] * 2000), round(p[1] * 2000)) for p in selected[0]["points"]["coordinates"])
     features = [
         feature
         for rank, path in enumerate(ranked_paths, start=1)

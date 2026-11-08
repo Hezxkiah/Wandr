@@ -118,6 +118,11 @@ export default function MapPage() {
                       style={{ backgroundColor: ROUTE_COLORS[index] }}
                     />
                   </span>
+                  <span className="mt-2 block text-xs text-black/60">
+                    {route.properties.scenery
+                      ? `mapped scenery score ${route.properties.scenery.score}/100 · ${Object.entries(route.properties.scenery.nearby_percent).filter(([, value]) => value >= 10).map(([kind, value]) => `${value}% near ${kind}`).join(' · ') || 'no nearby features mapped'}`
+                      : "mapped scenery data unavailable"}
+                  </span>
                   <span className="mt-3 block text-sm text-black/60">
                     {formatDuration(route.properties.duration_minutes)} {" "}(
                     {formatDistance(route.properties.distance_meters)}),{" "}
@@ -136,7 +141,7 @@ export default function MapPage() {
               onClick={chooseRoute}
               className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800"
             >
-              let's go!
+              let&apos;s go!
             </button>
           </div>
         </aside>

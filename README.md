@@ -93,3 +93,11 @@ Open `http://localhost:3000`.
 5. Return home and repeat with **end up at** using a fully qualified destination inside the loaded map area, for example `The University of Texas at Dallas, Richardson, Texas`.
 
 If the route request fails, check the FastAPI terminal first. Common causes are GraphHopper not running, the selected location being outside the downloaded OSM area, or location permission being denied.
+
+## Mapped scenery and walk testing
+
+After creating the Plano–UTD extract, run `bash backend/build_scenery.sh` and restart the backend. It filters OpenStreetMap features and writes an ignored local GeoJSON sequence. Set `WANDR_SCENERY_FILE` and `WANDR_SCENERY_BOUNDS` (west,south,east,north) when using a different extract. Without usable data or outside the configured bounds, scenery is reported as unavailable.
+
+Routes are sampled approximately every 25 m. Segments within 80 m of parks or water, 30 m of mapped trees/woods, or 50 m of viewpoints contribute to category proximity. The 0–100 score weights park 40%, water 30%, trees 20%, and viewpoint 10%. These are map-based approximations, not verified views, live traffic, or guarantees of access. Missing or incompletely mapped features can bias scores. Ranking prefers candidates within the requested time, then combines time fit (60%), scenery (40%), and a penalty for approximate overlap. When scenery is unavailable, it is neutral. Candidate generation itself still uses GraphHopper's walking model.
+
+On the walk screen in `npm run dev`, enable **Development simulator** to play, pause, change speed, or scrub a simulated position. Production builds do not expose this switch; it is not an authenticated admin role. GPS progress pauses for poor accuracy or when more than 50 m off-route. Progress and turn detection are approximate, especially on overlapping paths; verify conditions on the ground.

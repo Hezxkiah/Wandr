@@ -22,8 +22,16 @@ function getCurrentLocation() {
           lon: position.coords.longitude,
         });
       },
-      () => reject(new Error("Location access is required to start a walk.")),
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          reject(new Error("Location permission was denied. Allow location access for this site and your browser, then try again."));
+        } else if (error.code === error.TIMEOUT) {
+          reject(new Error("Finding your location timed out. Check location services and Wi-Fi, then try again."));
+        } else {
+          reject(new Error("Your location is temporarily unavailable. Check location services and Wi-Fi, then try again."));
+        }
+      },
+      { enableHighAccuracy: false, timeout: 20_000, maximumAge: 60_000 },
     );
   });
 }

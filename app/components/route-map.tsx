@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
+import type { Map as MapLibreMap, StyleSpecification, GeoJSONSource } from "maplibre-gl";
 import type { WandrRoute } from "../lib/routes";
 
 const ROUTE_COLORS = ["#527A7A", "#d95d39", "#536d45"];
@@ -31,6 +31,7 @@ type RouteMapProps = {
   onSelect?: (routeId: string) => void;
   interactive?: boolean;
   mapStyle?: MapStyle;
+  position?: [number, number] | null;
 };
 
 function layerIds(routeId: string) {
@@ -47,11 +48,17 @@ export default function RouteMap({
   onSelect,
   interactive = true,
   mapStyle = "simple",
+  position = null,
 }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
+  const positionRef = useRef(position);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -90,6 +97,9 @@ export default function RouteMap({
 
       map.on("load", () => {
         if (disposed) return;
+
+        map.addSource("walk-position", { type: "geojson", data: { type: "FeatureCollection", features: positionRef.current ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: positionRef.current } }] : [] } });
+        map.addLayer({ id: "walk-position", type: "circle", source: "walk-position", paint: { "circle-radius": 8, "circle-color": "#2472c8", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
 
         const bounds = new maplibregl.LngLatBounds();
         routes.forEach((route) => {
@@ -209,6 +219,11 @@ export default function RouteMap({
       mapRef.current = null;
     };
   }, [interactive, mapStyle, routes]);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource("walk-position") as GeoJSONSource | undefined;
+    source?.setData({ type: "FeatureCollection", features: position ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: position } }] : [] });
+  }, [position]);
 
   useEffect(() => {
     const map = mapRef.current;
