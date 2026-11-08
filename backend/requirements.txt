@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
 httpx
+osmium>=4,<5
 shapely>=2,<3
 

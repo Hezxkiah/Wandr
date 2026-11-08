@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { SubmitEvent } from "react";
@@ -139,13 +140,21 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-[#d6d7b9] p-2">
+    <div className="flex min-h-dvh w-full flex-col bg-[#d6d7b9]">
       <SiteHeader />
       <form
         onSubmit={onSubmit}
-        className="flex flex-1 flex-wrap items-center justify-center gap-4 px-4"
+        className="flex flex-1 flex-col items-center justify-center gap-6 px-4 -translate-y-16"
       >
-        <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
+        <Image
+          src="/walking.PNG"
+          alt="Poyo walking along a garden path"
+          width={455}
+          height={322}
+          preload
+          className="h-auto w-[min(360px,75vw)]"
+        />
+        <div className="flex flex-wrap items-center justify-center gap-4">
           <fieldset className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2">
             <legend className="sr-only">Starting location</legend>
             <button
@@ -173,34 +182,35 @@ export default function Home() {
             ))}
           </fieldset>
 
-          <label htmlFor="duration">i want to wander for</label>
-          <select
-            id="duration"
-            name="duration"
-            defaultValue="15"
-            className="mx-3 cursor-pointer rounded-lg border border-gray-300 px-2 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-          >
-            {[5, 10, 15, 20, 30, 45].map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes}
-              </option>
-            ))}
-          </select>
-          <span>minutes and</span>
-          <label htmlFor="walk-mode" className="sr-only">
-            where the walk ends
-          </label>
-          <select
-            id="walk-mode"
-            name="mode"
-            value={mode}
-            onChange={(event) => setMode(event.target.value as WalkMode)}
-            className="mx-3 cursor-pointer rounded-lg border border-gray-300 px-2 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-          >
-            <option value="round_trip">come back here</option>
-            <option value="point_to_point">end up at</option>
-          </select>
-        </div>
+          <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
+            <label htmlFor="duration">i want to wander for</label>
+            <select
+              id="duration"
+              name="duration"
+              defaultValue="15"
+              className="mx-3 cursor-pointer rounded-lg border border-gray-300 px-2 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              {[5, 10, 15, 20, 30, 45].map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes}
+                </option>
+              ))}
+            </select>
+            <span>minutes and</span>
+            <label htmlFor="walk-mode" className="sr-only">
+              where the walk ends
+            </label>
+            <select
+              id="walk-mode"
+              name="mode"
+              value={mode}
+              onChange={(event) => setMode(event.target.value as WalkMode)}
+              className="mx-3 cursor-pointer rounded-lg border border-gray-300 px-2 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              <option value="round_trip">come back here</option>
+              <option value="point_to_point">end up at</option>
+            </select>
+          </div>
 
         {mode === "point_to_point" && (
           <fieldset className="relative flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
@@ -251,13 +261,14 @@ export default function Home() {
           </fieldset>
         )}
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
-        >
-          {isLoading ? "finding paths..." : "go!"}
-        </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
+          >
+            {isLoading ? "finding paths..." : "go!"}
+          </button>
+        </div>
 
         {error && (
           <p role="alert" className="basis-full text-center text-sm text-[#9c321c]">

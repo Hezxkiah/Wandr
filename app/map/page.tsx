@@ -112,26 +112,21 @@ export default function MapPage() {
                   type="button"
                   onClick={() => setSelectedId(route.id)}
                   aria-pressed={active}
-                  className={`w-full cursor-pointer rounded-4xl px-5 py-4 text-left lowercase transition-colors ${
+                  className={`w-full cursor-pointer rounded-4xl border-l-4 px-5 py-4 text-left lowercase transition-colors ${
                     active
                       ? "bg-[#d8d8d0]"
                       : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
                   }`}
+                  style={{ borderLeftColor: ROUTE_COLORS[index] }}
                 >
-                  <span className="flex items-center justify-between gap-4">
-                    <span
-                      className="block h-3 w-3 shrink-0 rounded-full"
-                      style={{ backgroundColor: ROUTE_COLORS[index] }}
-                    />
-                  </span>
-                  <span className="mt-4 flex items-baseline justify-between gap-3 text-black">
+                  <span className="flex items-baseline justify-between gap-3 text-black">
                     <span className="text-lg">overall score</span>
                     <span className="text-3xl font-bold">
                       {score == null ? <span className="text-base font-normal">unavailable</span> : <>{Math.round(score / 10)}<span className="ml-1 text-lg font-normal text-black/60">/10</span></>}
                     </span>
                   </span>
                   <span className="mt-3 block text-base text-black/80">
-                    {formatDuration(route.properties.duration_minutes)} · {formatDistance(route.properties.distance_meters)}
+                    {formatDuration(route.properties.duration_minutes)} ({formatDistance(route.properties.distance_meters)})
                   </span>
                   <span className="mt-4 block space-y-2 border-t border-black/10 pt-3 text-sm text-black/80">
                     <span className="flex items-center justify-between gap-3">
@@ -154,7 +149,7 @@ export default function MapPage() {
               onClick={chooseRoute}
               className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800"
             >
-              let&apos;s go!
+              start walking
             </button>
           </div>
         </aside>
@@ -171,7 +166,7 @@ export default function MapPage() {
                   mapStyle === style ? "bg-black text-white" : "hover:bg-neutral-100"
                 }`}
               >
-                {style}
+                {style === "simple" ? "map" : style}
               </button>
             ))}
           </div>
