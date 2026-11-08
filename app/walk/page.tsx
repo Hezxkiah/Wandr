@@ -16,6 +16,8 @@ export default function WalkPage() {
   const progressRef = useRef(0);
   const [position, setPosition] = useState<Coord | null>(null);
   const [message, setMessage] = useState("");
+  const [landmarkMessage, setLandmarkMessage] = useState("");
+  const [lastNarratedLandmark, setLastNarratedLandmark] = useState("");
   const routes = useMemo(() => route ? [route] : [], [route]);
   const points = useMemo(() => route?.geometry.coordinates ?? [], [route]);
   const distances = useMemo(() => lengths(points), [points]);
@@ -42,6 +44,33 @@ export default function WalkPage() {
     queueMicrotask(() => setPosition(positionAt(points, distances, progress)));
   }, [simulate, points, distances, progress]);
 
+  const segmentIndex = Math.min(points.length - 2, Math.max(0, distances.findIndex((distance) => distance > progress) - 1));
+  const routeHeadingDegrees = points.length > 1 && segmentIndex >= 0
+    ? (Math.atan2((points[segmentIndex + 1][0] - points[segmentIndex][0]) * Math.cos(points[segmentIndex][1] * Math.PI / 180), points[segmentIndex + 1][1] - points[segmentIndex][1]) * 180 / Math.PI + 360) % 360
+    : 0;
+
+  useEffect(() => {
+    if (!simulate || !position || !total || !started) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("http://localhost:8000/narration", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ coordinate: { lon: position[0], lat: position[1] }, progress_meters: progress, total_meters: total, route_heading_degrees: routeHeadingDegrees }),
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (controller.signal.aborted) return;
+        const key = data.landmarks?.[0]
+          ? `${data.landmarks[0].kind}:${data.landmarks[0].name}`
+          : `walk-progress:${Math.round(progress / 75)}`;
+        if (key !== lastNarratedLandmark) { setLandmarkMessage(data.message); setLastNarratedLandmark(key); }
+      } catch { /* narration is optional */ }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [simulate, position, progress, total, started, lastNarratedLandmark, routeHeadingDegrees]);
+
   useEffect(() => {
     if (!started || simulate || !points.length) return;
     if (!navigator.geolocation) { queueMicrotask(() => setMessage("Location is not supported by this browser.")); return; }
@@ -67,7 +96,7 @@ export default function WalkPage() {
     <SiteHeader />
     <div className="relative min-h-0 flex-1">
       <RouteMap routes={routes} selectedId={route.id} interactive={false} position={position} />
-      <section className="absolute bottom-3 left-3 z-[500] max-h-[calc(100%-24px)] w-[min(350px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-white p-4">
+      <section className="absolute left-3 top-3 z-[500] max-h-[calc(100%-24px)] w-[min(350px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-white p-4 sm:left-5 sm:top-5">
         <div className="mb-4 flex items-center gap-3">
           <Link href="/map" aria-label="Back to route options" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-black/5">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
@@ -80,6 +109,14 @@ export default function WalkPage() {
         {process.env.NODE_ENV === "development" && <fieldset className="mb-4 rounded-2xl border border-black/30 p-3 text-sm"><legend>Development simulator</legend><label className="flex gap-2"><input type="checkbox" checked={simulate} onChange={(e) => { setStarted(false); setSimulate(e.target.checked); setProgress(0); setPosition(null); setMessage(""); }} /> Simulate location (not GPS)</label>{simulate && <><label className="mt-2 block">Progress: {Math.round(total ? progress / total * 100 : 0)}%<input aria-label="Simulated route progress" className="w-full" type="range" min="0" max={total || 1} value={progress} onChange={(e) => setProgress(Number(e.target.value))} /></label><label>Speed <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}><option value={1}>1×</option><option value={10}>10×</option><option value={30}>30×</option><option value={60}>60×</option></select></label></>}</fieldset>}
         <button type="button" onClick={() => { if (arrived) setProgress(0); setStarted((value) => arrived ? true : !value); }} className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800">{arrived ? "restart walk" : started ? "pause walk" : "start walking →"}</button>
       </section>
+      {landmarkMessage && simulate && (
+        <aside
+          className="absolute right-3 top-3 z-[500] max-h-[40%] w-[min(520px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-[#f3f3ed] sm:right-5 sm:top-5"
+          aria-live="polite"
+        >
+          <p className="rounded-4xl bg-[#f3f3ed] px-6 py-5 text-lg leading-relaxed">{landmarkMessage}</p>
+        </aside>
+      )}
     </div>
   </main>;
 }

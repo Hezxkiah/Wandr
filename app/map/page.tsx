@@ -8,6 +8,7 @@ import SiteHeader from "../components/site-header";
 import {
   formatDistance,
   formatDuration,
+  walkScore,
   ROUTES_STORAGE_KEY,
   SELECTED_ROUTE_STORAGE_KEY,
   type RouteCollection,
@@ -28,6 +29,10 @@ export default function MapPage() {
     queueMicrotask(() => {
       try {
         const parsed = JSON.parse(saved) as RouteCollection;
+        parsed.features.sort(
+          (first, second) =>
+            (walkScore(second) ?? -1) - (walkScore(first) ?? -1),
+        );
         setCollection(parsed);
         setSelectedId(parsed.features[0]?.id ?? "");
       } catch {
@@ -100,13 +105,14 @@ export default function MapPage() {
           <div className="space-y-3">
             {collection.features.map((route, index) => {
               const active = route.id === selectedId;
+              const score = walkScore(route);
               return (
                 <button
                   key={route.id}
                   type="button"
                   onClick={() => setSelectedId(route.id)}
                   aria-pressed={active}
-                  className={`w-full cursor-pointer rounded-4xl px-4 py-3 text-left lowercase transition-colors ${
+                  className={`w-full cursor-pointer rounded-4xl px-5 py-4 text-left lowercase transition-colors ${
                     active
                       ? "bg-[#d8d8d0]"
                       : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
@@ -118,17 +124,24 @@ export default function MapPage() {
                       style={{ backgroundColor: ROUTE_COLORS[index] }}
                     />
                   </span>
-                  <span className="mt-2 block text-xs text-black/60">
-                    {route.properties.scenery
-                      ? `mapped scenery score ${route.properties.scenery.score}/100 · ${Object.entries(route.properties.scenery.nearby_percent).filter(([, value]) => value >= 10).map(([kind, value]) => `${value}% near ${kind}`).join(' · ') || 'no nearby features mapped'}`
-                      : "mapped scenery data unavailable"}
+                  <span className="mt-4 flex items-baseline justify-between gap-3 text-black">
+                    <span className="text-lg">overall score</span>
+                    <span className="text-3xl font-bold">
+                      {score == null ? <span className="text-base font-normal">unavailable</span> : <>{Math.round(score / 10)}<span className="ml-1 text-lg font-normal text-black/60">/10</span></>}
+                    </span>
                   </span>
-                  <span className="mt-3 block text-sm text-black/60">
-                    {formatDuration(route.properties.duration_minutes)} {" "}(
-                    {formatDistance(route.properties.distance_meters)}),{" "}
-                    {route.properties.low_traffic_percent == null
-                      ? "traffic mix unavailable"
-                      : `${route.properties.low_traffic_percent}% low traffic`}
+                  <span className="mt-3 block text-base text-black/80">
+                    {formatDuration(route.properties.duration_minutes)} · {formatDistance(route.properties.distance_meters)}
+                  </span>
+                  <span className="mt-4 block space-y-2 border-t border-black/10 pt-3 text-sm text-black/80">
+                    <span className="flex items-center justify-between gap-3">
+                      <span>mapped scenery</span>
+                      <span>{route.properties.scenery ? `${Math.round(route.properties.scenery.score / 10)}/10` : "unavailable"}</span>
+                    </span>
+                    <span className="flex items-center justify-between gap-3">
+                      <span>quieter roads</span>
+                      <span>{route.properties.low_traffic_percent == null ? "unavailable" : `${Math.round(route.properties.low_traffic_percent / 10)}/10`}</span>
+                    </span>
                   </span>
                 </button>
               );
