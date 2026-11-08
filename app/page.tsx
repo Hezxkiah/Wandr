@@ -1,13 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SubmitEvent } from "react";
 import SiteHeader from "./components/site-header";
 import { ROUTES_STORAGE_KEY } from "./lib/routes";
 
 type WalkMode = "point_to_point" | "round_trip";
-type Place = { label: string; name?: string; lat: number; lon: number };
+
+const PRESET_LOCATIONS: { label: string; lat: number; lon: number }[] = [
+  { label: "Austin, TX", lat: 30.2672, lon: -97.7431 },
+  { label: "Dallas, TX", lat: 32.7767, lon: -96.797 },
+];
 
 function getCurrentLocation() {
   return new Promise<{ lat: number; lon: number }>((resolve, reject) => {
@@ -23,16 +27,8 @@ function getCurrentLocation() {
           lon: position.coords.longitude,
         });
       },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          reject(new Error("Location permission was denied. Allow location access for this site and your browser, then try again."));
-        } else if (error.code === error.TIMEOUT) {
-          reject(new Error("Finding your location timed out. Check location services and Wi-Fi, then try again."));
-        } else {
-          reject(new Error("Your location is temporarily unavailable. Check location services and Wi-Fi, then try again."));
-        }
-      },
-      { enableHighAccuracy: false, timeout: 20_000, maximumAge: 60_000 },
+      () => reject(new Error("Location access is required to start a walk.")),
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     );
   });
 }
@@ -42,46 +38,7 @@ export default function Home() {
   const [mode, setMode] = useState<WalkMode>("round_trip");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [destination, setDestination] = useState("");
-  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [suggestions, setSuggestions] = useState<Place[]>([]);
-  const [suggestionStatus, setSuggestionStatus] = useState("");
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-
-  useEffect(() => {
-    const query = destination.trim();
-    if (mode !== "point_to_point" || selectedPlace || query.length < 2) return;
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`http://localhost:8000/places?q=${encodeURIComponent(query)}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("unavailable");
-        const places: Place[] = await response.json();
-        if (!controller.signal.aborted) {
-          setSuggestions(places);
-          setSuggestionStatus(places.length ? "" : "No local address matches. You can still enter a full destination.");
-          setOpen(true);
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setSuggestions([]);
-          setSuggestionStatus("Suggestions unavailable. You can still enter a destination.");
-          setOpen(true);
-        }
-      }
-    }, 250);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [destination, mode, selectedPlace]);
-
-  function selectPlace(place: Place) {
-    setDestination(place.name ? `${place.name} — ${place.label}` : place.label);
-    setSelectedPlace(place);
-    setSuggestions([]);
-    setSuggestionStatus("");
-    setActiveIndex(-1);
-    setOpen(false);
-  }
+  const [start, setStart] = useState<{ lat: number; lon: number } | null>(null);
 
   async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,21 +48,21 @@ export default function Home() {
     const formData = new FormData(event.currentTarget);
     const minutes = Number(formData.get("duration"));
 
-    try {
-      const start = await getCurrentLocation();
-      const endName =
-        mode === "point_to_point"
-          ? String(formData.get("end_name") ?? "").trim()
-          : undefined;
+    const startCoord = start ?? (await getCurrentLocation());
 
+    const endName =
+      mode === "point_to_point"
+        ? String(formData.get("end_name") ?? "").trim()
+        : undefined;
+
+    try {
       const response = await fetch("http://localhost:8000/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
-          start,
-          end_name: selectedPlace ? undefined : endName,
-          end: mode === "point_to_point" && selectedPlace ? { lat: selectedPlace.lat, lon: selectedPlace.lon } : undefined,
+          start: startCoord,
+          end_name: endName,
           vibe: "serenity",
           target_minutes: minutes,
         }),
@@ -138,6 +95,33 @@ export default function Home() {
         className="flex flex-1 flex-wrap items-center justify-center gap-4 px-4"
       >
         <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
+          <fieldset className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2">
+            <legend className="sr-only">Starting location</legend>
+            <button
+              type="button"
+              onClick={() => setStart(null)}
+              className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                start === null ? "bg-black text-white" : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
+              }`}
+            >
+              Use my location
+            </button>
+            {PRESET_LOCATIONS.map((loc) => (
+              <button
+                key={loc.label}
+                type="button"
+                onClick={() => setStart(loc)}
+                className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  start?.lat === loc.lat && start?.lon === loc.lon
+                    ? "bg-black text-white"
+                    : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
+                }`}
+              >
+                {loc.label}
+              </button>
+            ))}
+          </fieldset>
+
           <label htmlFor="duration">i want to wander for</label>
           <select
             id="duration"
@@ -168,42 +152,16 @@ export default function Home() {
         </div>
 
         {mode === "point_to_point" && (
-          <fieldset className="relative flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
+          <fieldset className="flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
             <legend className="sr-only">Destination</legend>
             <input
               type="text"
               name="end_name"
-              role="combobox"
               aria-label="Destination name or address"
-              aria-autocomplete="list"
-              aria-expanded={open}
-              aria-controls="destination-suggestions"
-              aria-activedescendant={activeIndex >= 0 ? `destination-option-${activeIndex}` : undefined}
               required
-              value={destination}
-              autoComplete="off"
-              onChange={(event) => { setDestination(event.target.value); setSelectedPlace(null); setSuggestions([]); setSuggestionStatus(""); setActiveIndex(-1); setOpen(false); }}
-              onFocus={() => { if (suggestions.length || suggestionStatus) setOpen(true); }}
-              onBlur={() => window.setTimeout(() => setOpen(false), 150)}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown" && suggestions.length) { event.preventDefault(); setOpen(true); setActiveIndex((index) => Math.min(index + 1, suggestions.length - 1)); }
-                if (event.key === "ArrowUp" && suggestions.length) { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
-                if (event.key === "Enter" && open && activeIndex >= 0 && suggestions[activeIndex]) { event.preventDefault(); selectPlace(suggestions[activeIndex]); }
-                if (event.key === "Escape") { setOpen(false); setActiveIndex(-1); }
-              }}
-              placeholder="enter an address or place"
+              placeholder="a park, cafe, or address"
               className="w-56 rounded-lg border border-gray-300 px-3 py-2 normal-case placeholder:text-gray-400"
             />
-            {open && <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-3xl bg-white py-2 normal-case shadow-lg">
-              <ul id="destination-suggestions" role="listbox">
-                {suggestions.map((place, index) => <li key={`${place.lat}-${place.lon}-${place.label}`} id={`destination-option-${index}`} role="option" aria-selected={index === activeIndex} onMouseDown={(event) => event.preventDefault()} onClick={() => selectPlace(place)} className={`cursor-pointer px-5 py-2 text-sm ${index === activeIndex ? "bg-[#e8e8e1]" : "hover:bg-[#f3f3ed]"}`}>
-                  {place.name && <span className="block">{place.name}</span>}
-                  <span className={place.name ? "block text-xs text-black/60" : "block"}>{place.label}</span>
-                </li>)}
-              </ul>
-              {suggestionStatus && <p role="status" className="px-5 py-2 text-sm text-black/60">{suggestionStatus}</p>}
-              <p className="px-5 pt-1 text-xs text-black/50">Local results · © OpenStreetMap contributors</p>
-            </div>}
           </fieldset>
         )}
 
