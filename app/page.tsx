@@ -154,9 +154,9 @@ export default function Home() {
           preload
           className="h-auto w-[min(360px,75vw)]"
         />
-        <div className="flex flex-col items-center justify-center gap-4">
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <div className="contents">
+            <div className="order-1 flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
             <label htmlFor="duration">i want to wander for</label>
             <select
               id="duration"
@@ -189,13 +189,13 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading}
-              className="rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
+              className="order-3 rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
             >
               {isLoading ? "finding paths..." : "go!"}
             </button>
           </div>
 
-          <fieldset className="flex flex-wrap items-center justify-center gap-2">
+          <fieldset className="order-4 flex basis-full flex-wrap items-center justify-center gap-2">
             <legend className="sr-only">Starting location</legend>
             <button
               type="button"
@@ -223,7 +223,7 @@ export default function Home() {
           </fieldset>
 
         {mode === "point_to_point" && (
-          <fieldset className="relative flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
+          <fieldset className="relative order-2 flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
             <legend className="sr-only">Destination</legend>
             <input
               type="text"
