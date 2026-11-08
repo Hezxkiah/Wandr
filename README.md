@@ -13,16 +13,33 @@ Wandr has three local services. Run each in a separate terminal:
 | FastAPI backend | `http://localhost:8000` | Adds Wandr's route selection, scoring, and destination lookup. |
 | Next.js frontend | `http://localhost:3000` | The browser interface. |
 
-Before starting, install Java and download both a GraphHopper distribution and an `.osm.pbf` extract for the area you want to support. These large external assets are deliberately not committed to this repository. The included GraphHopper configuration is currently set up for a Texas extract.
+Before starting, install Java 25 or newer and download GraphHopper 11.1 and an OpenStreetMap extract. These external assets are not committed. The local launcher defaults to a Plano–UTD extract; the backend geocoder is bounded to Texas.
+
+The backend requires Python 3.10 or newer.
 
 ### GraphHopper
 
-Download the Texas `.osm.pbf` map from [Geofabrik](https://download.geofabrik.de/north-america/us/texas.html), then point GraphHopper to its path.
+For the Plano–UTD development map, install `osmium-tool` and create an extract from Geofabrik's Texas data:
+
+```bash
+mkdir -p backend/.graphhopper
+curl -fL https://repo1.maven.org/maven2/com/graphhopper/graphhopper-web/11.1/graphhopper-web-11.1.jar -o backend/.graphhopper/graphhopper-web-11.1.jar
+curl -fL https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf -o backend/.graphhopper/texas-source.osm.pbf
+osmium extract --bbox=-96.95,32.94,-96.60,33.15 --strategy=complete_ways --output backend/.graphhopper/plano-utd.osm.pbf backend/.graphhopper/texas-source.osm.pbf
+```
+
+This bounded map covers Plano and UTD, not the entire Dallas area. The Texas source file can be removed after extraction to reclaim disk space. The launcher uses a separate cache for this extract.
 
 The repository includes a Windows PowerShell helper. Update its `GraphHopperHome`, `JavaExecutable`, and `MapFile` defaults, or provide those values explicitly:
 
 ```powershell
-.\backend\start_graphhopper.ps1 -MapFile "C:\path\to\texas-latest.osm.pbf"
+.\backend\start_graphhopper.ps1 -MapFile "C:\path\to\utd.osm"
+```
+
+macOS/Linux after placing the JAR and map file in `backend/.graphhopper/`:
+
+```bash
+./backend/start_graphhopper.sh
 ```
 
 GraphHopper should be ready when this succeeds:
@@ -37,7 +54,7 @@ macOS/Linux:
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
@@ -53,7 +70,7 @@ python -m pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-Verify the backend can reach GraphHopper:
+Verify the backend is running (this endpoint does not check GraphHopper):
 
 ```bash
 curl http://localhost:8000/health
@@ -73,6 +90,6 @@ Open `http://localhost:3000`.
 2. Choose a duration and test a round-trip walk.
 3. Confirm route options render on `/map`, switch between the simple and satellite map styles, and select a route.
 4. Continue to `/walk`, start the walk, and confirm the first direction appears.
-5. Return home and repeat with **end up at** using a destination within the configured Texas geocoding area.
+5. Return home and repeat with **end up at** using a fully qualified destination inside the loaded map area, for example `The University of Texas at Dallas, Richardson, Texas`.
 
 If the route request fails, check the FastAPI terminal first. Common causes are GraphHopper not running, the selected location being outside the downloaded OSM area, or location permission being denied.

@@ -39,6 +39,8 @@ __pycache__/
 *.py[cod]
 
 # GraphHopper runtime artifacts (if generated inside this repository)
+/backend/.graphhopper/
+/backend/logs/
 *.osm.pbf
 graphhopper-web-*.jar
 graph-cache/
