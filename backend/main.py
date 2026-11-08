@@ -316,15 +316,36 @@ def places(q: str = Query(min_length=2, max_length=200)):
     return results
 
 
-@app.post("/narration")
-async def narration(request: NarrationRequest) -> dict[str, Any]:
+def walk_context(request: NarrationRequest) -> dict[str, Any]:
     landmarks = scenery_index.nearby([request.coordinate.lon, request.coordinate.lat])
     if not landmarks:
-        return {"message": "Take a breath and let your shoulders settle. What catches your attention here?", "landmarks": []}
+        prompts = [
+            "Take a breath and let your shoulders settle. What catches your attention here?",
+            "Let your pace soften for a moment. Notice the sounds around this part of your walk.",
+            "Pause if you feel like it. Find one small detail you hadn’t noticed before.",
+        ]
+        return {"message": prompts[int(request.progress_meters // 150) % len(prompts)], "landmarks": [], "llm_available": False}
+
+    names = " and ".join(item["name"] for item in landmarks[:2])
+    return {"message": f"You’re near {names}. Take a slow breath and a moment to look around.", "landmarks": landmarks, "llm_available": bool(OPENAI_API_KEY)}
+
+
+@app.post("/walk-context")
+def current_walk_context(request: NarrationRequest) -> dict[str, Any]:
+    # Local lookup stays responsive even while an optional LLM request runs.
+    return walk_context(request)
+
+
+@app.post("/narration")
+async def narration(request: NarrationRequest) -> dict[str, Any]:
+    context = walk_context(request)
+    landmarks = context["landmarks"]
+    if not landmarks:
+        return context
 
     landmark = landmarks[0]
     label = landmark["name"]
-    fallback = f"You’re near {label}. Take a slow breath and a moment to look around."
+    fallback = context["message"]
     if not OPENAI_API_KEY:
         return {"message": fallback, "landmarks": landmarks}
 

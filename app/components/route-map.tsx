@@ -99,7 +99,7 @@ export default function RouteMap({
         if (disposed) return;
 
         map.addSource("walk-position", { type: "geojson", data: { type: "FeatureCollection", features: positionRef.current ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: positionRef.current } }] : [] } });
-        map.addLayer({ id: "walk-position", type: "circle", source: "walk-position", paint: { "circle-radius": 8, "circle-color": "#2472c8", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+        map.addLayer({ id: "walk-position", type: "circle", source: "walk-position", paint: { "circle-radius": 11, "circle-color": "#111111", "circle-stroke-color": "#ffffff", "circle-stroke-width": 4 } });
 
         const bounds = new maplibregl.LngLatBounds();
         routes.forEach((route) => {
@@ -207,6 +207,7 @@ export default function RouteMap({
           });
         }
 
+        map.moveLayer("walk-position");
         map.fitBounds(bounds, { padding: 44, duration: 0 });
       });
     }
@@ -244,6 +245,7 @@ export default function RouteMap({
         if (map.getLayer("route-endpoints")) map.moveLayer("route-endpoints");
       }
     });
+    if (map.getLayer("walk-position")) map.moveLayer("walk-position");
   }, [routes, selectedId]);
 
   return <div ref={containerRef} className="h-full w-full bg-[#c9d5c3]" />;

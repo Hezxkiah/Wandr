@@ -17,7 +17,6 @@ export default function WalkPage() {
   const [position, setPosition] = useState<Coord | null>(null);
   const [message, setMessage] = useState("");
   const [landmarkMessage, setLandmarkMessage] = useState("");
-  const [lastNarratedLandmark, setLastNarratedLandmark] = useState("");
   const routes = useMemo(() => route ? [route] : [], [route]);
   const points = useMemo(() => route?.geometry.coordinates ?? [], [route]);
   const distances = useMemo(() => lengths(points), [points]);
@@ -49,27 +48,48 @@ export default function WalkPage() {
     ? (Math.atan2((points[segmentIndex + 1][0] - points[segmentIndex][0]) * Math.cos(points[segmentIndex][1] * Math.PI / 180), points[segmentIndex + 1][1] - points[segmentIndex][1]) * 180 / Math.PI + 360) % 360
     : 0;
 
+  const narrationPosition = useRef({ position, progress, total, routeHeadingDegrees });
   useEffect(() => {
-    if (!simulate || !position || !total || !started) return;
+    narrationPosition.current = { position, progress, total, routeHeadingDegrees };
+  }, [position, progress, total, routeHeadingDegrees]);
+  // Refresh after roughly a short block, rather than aborting on every GPS tick.
+  const landscapeCell = position ? `${Math.floor(position[0] * 1250)}:${Math.floor(position[1] * 1250)}` : "";
+  const progressBlock = Math.floor(progress / 150);
+
+  useEffect(() => {
+    if (!simulate || !landscapeCell) return;
     const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
+    async function updateContext() {
+      const current = narrationPosition.current;
+      if (!current.position) return;
+      let contextLoaded = false;
+      const body = JSON.stringify({ coordinate: { lon: current.position[0], lat: current.position[1] }, progress_meters: current.progress, total_meters: current.total, route_heading_degrees: current.routeHeadingDegrees });
       try {
-        const response = await fetch("http://localhost:8000/narration", {
+        const response = await fetch("http://localhost:8000/walk-context", {
           method: "POST", headers: { "Content-Type": "application/json" },
           signal: controller.signal,
-          body: JSON.stringify({ coordinate: { lon: position[0], lat: position[1] }, progress_meters: progress, total_meters: total, route_heading_degrees: routeHeadingDegrees }),
+          body,
         });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error("Context unavailable");
         const data = await response.json();
         if (controller.signal.aborted) return;
-        const key = data.landmarks?.[0]
-          ? `${data.landmarks[0].kind}:${data.landmarks[0].name}`
-          : `walk-progress:${Math.round(progress / 75)}`;
-        if (key !== lastNarratedLandmark) { setLandmarkMessage(data.message); setLastNarratedLandmark(key); }
-      } catch { /* narration is optional */ }
-    }, 350);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [simulate, position, progress, total, started, lastNarratedLandmark, routeHeadingDegrees]);
+        setLandmarkMessage(data.message);
+        contextLoaded = true;
+        if (data.llm_available) {
+          const generated = await fetch("http://localhost:8000/narration", {
+            method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body,
+          });
+          if (!generated.ok) return;
+          const narration = await generated.json();
+          if (!controller.signal.aborted) setLandmarkMessage(narration.message);
+        }
+      } catch {
+        if (!controller.signal.aborted && !contextLoaded) setLandmarkMessage("Local surroundings couldn’t be loaded. Keep taking in what’s around you.");
+      }
+    }
+    void updateContext();
+    return () => controller.abort();
+  }, [simulate, landscapeCell, progressBlock]);
 
   useEffect(() => {
     if (!started || simulate || !points.length) return;

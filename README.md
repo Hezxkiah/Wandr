@@ -96,6 +96,8 @@ If the route request fails, check the FastAPI terminal first. Common causes are 
 
 ## Mapped scenery and walk testing
 
+Simulated walk popups refresh on changes to a roughly block-sized coordinate cell or each 150 m of route progress, including when scrubbing while paused. `/walk-context` supplies immediate local landmark text; optional `/narration` generation enriches it without delaying that update. For Austin–Dallas routes, rebuild the scenery index with `bash backend/build_scenery.sh backend/.graphhopper/austin-dallas.osm.pbf`, then restart FastAPI to load it. The scenery builder safely replaces the previous generated index. Nearby names are sourced from the loaded OSM extract; named landmarks outside that extract cannot appear.
+
 Route cards show an integer walk score out of 10, combining the scenery score (65%) with quieter-road coverage (35%). Quiet coverage is estimated from mapped road classes, not live traffic. If one component is unavailable, the score uses only the available component and the card states that limitation. Missing data is distinct from measured zero coverage. Options are sorted by the unrounded combined score, so equal displayed integers can still have a consistent order. Candidate selection balances time fit (60%) with combined walk quality (40%) and route diversity.
 
 After creating the Plano–UTD extract, run `bash backend/build_scenery.sh` and restart the backend. It filters OpenStreetMap features and writes an ignored local GeoJSON sequence. Set `WANDR_SCENERY_FILE` and `WANDR_SCENERY_BOUNDS` (west,south,east,north) when using a different extract. Without usable data or outside the configured bounds, scenery is reported as unavailable.
