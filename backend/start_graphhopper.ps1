@@ -1,6 +1,6 @@
 param(
     [string]$GraphHopperHome = (Join-Path $env:USERPROFILE "graphhopper"),
-    [string]$JavaExecutable = "C:\Program Files\Java\jdk-25.0.5.0.2\bin\java.exe",
+    [string]$JavaExecutable = "C:\Program Files\Microsoft\jdk-25.0.5.21-hotspot\bin\java.exe",
     [string]$MapFile = "C:\Users\annie\Downloads\texas-261107.osm.pbf"
 )
 
