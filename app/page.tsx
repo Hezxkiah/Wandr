@@ -154,35 +154,9 @@ export default function Home() {
           preload
           className="h-auto w-[min(360px,75vw)]"
         />
-        <div className="flex flex-wrap items-center justify-center gap-4">
-          <fieldset className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2">
-            <legend className="sr-only">Starting location</legend>
-            <button
-              type="button"
-              onClick={() => chooseStart(null)}
-              className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                start === null ? "bg-black text-white" : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
-              }`}
-            >
-              Use my location
-            </button>
-            {PRESET_LOCATIONS.map((loc) => (
-              <button
-                key={loc.label}
-                type="button"
-                onClick={() => chooseStart(loc)}
-                className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                  start?.lat === loc.lat && start?.lon === loc.lon
-                    ? "bg-black text-white"
-                    : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
-                }`}
-              >
-                {loc.label}
-              </button>
-            ))}
-          </fieldset>
-
-          <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-y-2 rounded-4xl bg-white px-8 py-3 lowercase">
             <label htmlFor="duration">i want to wander for</label>
             <select
               id="duration"
@@ -210,7 +184,43 @@ export default function Home() {
               <option value="round_trip">come back here</option>
               <option value="point_to_point">end up at</option>
             </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
+            >
+              {isLoading ? "finding paths..." : "go!"}
+            </button>
           </div>
+
+          <fieldset className="flex flex-wrap items-center justify-center gap-2">
+            <legend className="sr-only">Starting location</legend>
+            <button
+              type="button"
+              onClick={() => chooseStart(null)}
+              className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                start === null ? "bg-neutral-700 text-white" : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
+              }`}
+            >
+              Use my location
+            </button>
+            {PRESET_LOCATIONS.map((loc) => (
+              <button
+                key={loc.label}
+                type="button"
+                onClick={() => chooseStart(loc)}
+                className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  start?.lat === loc.lat && start?.lon === loc.lon
+                    ? "bg-neutral-700 text-white"
+                    : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
+                }`}
+              >
+                {loc.label}
+              </button>
+            ))}
+          </fieldset>
 
         {mode === "point_to_point" && (
           <fieldset className="relative flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
@@ -261,13 +271,6 @@ export default function Home() {
           </fieldset>
         )}
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800 cursor-pointer disabled:cursor-wait disabled:opacity-70"
-          >
-            {isLoading ? "finding paths..." : "go!"}
-          </button>
         </div>
 
         {error && (

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import RouteMap from "../components/route-map";
@@ -10,6 +11,7 @@ import { instructionAt, lengths, positionAt, project, type Coord } from "../lib/
 export default function WalkPage() {
   const [route, setRoute] = useState<WandrRoute | null>(null);
   const [started, setStarted] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const [simulate, setSimulate] = useState(false);
   const [speed, setSpeed] = useState(10);
   const [progress, setProgress] = useState(0);
@@ -28,7 +30,18 @@ export default function WalkPage() {
     const saved = sessionStorage.getItem(SELECTED_ROUTE_STORAGE_KEY);
     if (!saved) return;
     queueMicrotask(() => {
-      try { setRoute(JSON.parse(saved) as WandrRoute); } catch { sessionStorage.removeItem(SELECTED_ROUTE_STORAGE_KEY); }
+      try {
+        setStarted(false);
+        setCompleted(false);
+        setProgress(0);
+        progressRef.current = 0;
+        setPosition(null);
+        setMessage("");
+        setLandmarkMessage("");
+        setRoute(JSON.parse(saved) as WandrRoute);
+      } catch {
+        sessionStorage.removeItem(SELECTED_ROUTE_STORAGE_KEY);
+      }
     });
   }, []);
 
@@ -116,19 +129,63 @@ export default function WalkPage() {
     <SiteHeader />
     <div className="relative min-h-0 flex-1">
       <RouteMap routes={routes} selectedId={route.id} interactive={false} position={position} />
-      <section className="absolute bottom-3 left-3 z-[500] max-h-[calc(100%-24px)] w-[min(350px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-white p-4 sm:bottom-auto sm:left-5 sm:top-5">
+      <section className={`absolute bottom-3 left-3 z-[500] max-h-[calc(100%-24px)] w-[min(350px,calc(100%-24px))] overflow-y-auto rounded-4xl p-4 sm:bottom-auto sm:left-5 sm:top-5 ${completed ? "bg-[#f3f3ed]" : "bg-white"}`}>
         <div className="mb-4 flex items-center gap-3">
           <Link href="/map" aria-label="Back to route options" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-black/5">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </Link>
         </div>
+        {completed ? (
+          <div aria-live="polite" className="text-center">
+            <h1 className="text-3xl">wandr complete!</h1>
+            <Image
+              src="/congrats.png"
+              alt="A happy character celebrating with confetti"
+              width={360}
+              height={360}
+              className="mx-auto h-auto w-full max-w-72"
+            />
+            <div className="flex flex-row justify-between gap-3 rounded-4xl bg-[#f3f3ed] px-4 py-4 text-left">
+              <p>
+                <span className="block text-xl">{formatDuration(route.properties.duration_minutes)}</span>
+                <span className="text-xs text-black/60">mins walked</span>
+              </p>
+              <p>
+                <span className="block text-xl">{formatDistance(route.properties.distance_meters)}</span>
+                <span className="text-xs text-black/60">distance</span>
+              </p>
+              <p>
+                <span className="block text-xl">100%</span>
+                <span className="text-xs text-black/60">complete</span>
+              </p>
+            </div>
+            <Link
+              href="/"
+              onClick={() => {
+                setStarted(false);
+                setCompleted(false);
+                setProgress(0);
+                progressRef.current = 0;
+                setPosition(null);
+                setMessage("");
+                setLandmarkMessage("");
+              }}
+              className="mt-4 block w-full rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800"
+            >
+              find new route
+            </Link>
+          </div>
+        ) : (
+          <>
         {!started && !arrived && (
-          <div className="mb-4 rounded-4xl bg-[#f3f3ed] px-4 py-4">
-            <p className="mb-1 text-xs text-black/60">route overview</p>
-            <p className="text-2xl">
-              {formatDuration(route.properties.duration_minutes)} <span aria-hidden="true">&middot;</span>{" "}
-              {formatDistance(route.properties.distance_meters)}
-            </p>
+          <div className="mb-4">
+            <p className="mb-2 text-xs text-black/60">route overview</p>
+            <div className="rounded-4xl bg-[#f3f3ed] px-4 py-4">
+              <p className="text-2xl">
+                {formatDuration(route.properties.duration_minutes)} <span aria-hidden="true">&middot;</span>{" "}
+                {formatDistance(route.properties.distance_meters)}
+              </p>
+            </div>
           </div>
         )}
         {(started || arrived) && (
@@ -140,18 +197,32 @@ export default function WalkPage() {
         )}
         {(started || arrived) && (
           <div className="mb-4 rounded-4xl bg-[#f3f3ed] px-4 py-4" aria-live="polite">
-            <p className="mb-1 text-xs text-black/60">{arrived ? "walk status" : simulate ? "simulated direction" : "current direction"}</p>
-            <p className="text-2xl">{arrived ? "Walk complete" : instruction?.text ?? "Continue along the route."}</p>
+            <p className="text-2xl">{arrived ? "You made it!" : instruction?.text ?? "Continue along the route."}</p>
             {!arrived && instructionEnd != null && (
-              <p className="mt-2 text-xs text-black/60">{formatDistance(Math.max(0, instructionEnd - progress))} until next instruction</p>
+              <p className="mt-2 text-xs text-black/60">{formatDistance(Math.max(0, instructionEnd - progress))}</p>
             )}
           </div>
         )}
         {message && <p role="status" className="mb-3 text-sm text-red-800">{message}</p>}
         {process.env.NODE_ENV === "development" && <fieldset className="mb-4 rounded-2xl border border-black/30 p-3 text-sm"><legend>Development simulator</legend><label className="flex gap-2"><input type="checkbox" checked={simulate} onChange={(e) => { setStarted(false); setSimulate(e.target.checked); setProgress(0); setPosition(null); setMessage(""); }} /> Simulate location (not GPS)</label>{simulate && <><label className="mt-2 block">Progress: {Math.round(total ? progress / total * 100 : 0)}%<input aria-label="Simulated route progress" className="w-full" type="range" min="0" max={total || 1} value={progress} onChange={(e) => setProgress(Number(e.target.value))} /></label><label>Speed <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}><option value={1}>1×</option><option value={10}>10×</option><option value={30}>30×</option><option value={60}>60×</option></select></label></>}</fieldset>}
-        <button type="button" onClick={() => { if (arrived) setProgress(0); setStarted((value) => arrived ? true : !value); }} className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800">{arrived ? "restart walk" : started ? "pause walk" : "start walking →"}</button>
+        <button
+          type="button"
+          onClick={() => {
+            if (arrived) {
+              setStarted(false);
+              setCompleted(true);
+              return;
+            }
+            setStarted((value) => !value);
+          }}
+          className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800"
+        >
+          {arrived ? "i'm done wandering" : started ? "pause walk" : "start walking →"}
+        </button>
+          </>
+        )}
       </section>
-      {landmarkMessage && simulate && (
+      {!completed && landmarkMessage && simulate && (
         <aside
           className="absolute right-3 top-3 z-[500] max-h-[40%] w-[min(520px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-[#f3f3ed] sm:right-5 sm:top-5"
           aria-live="polite"

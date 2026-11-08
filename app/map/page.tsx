@@ -112,18 +112,22 @@ export default function MapPage() {
                   type="button"
                   onClick={() => setSelectedId(route.id)}
                   aria-pressed={active}
-                  className={`w-full cursor-pointer rounded-4xl border-l-4 px-5 py-4 text-left lowercase transition-colors ${
+                  className={`relative w-full cursor-pointer overflow-hidden rounded-4xl px-5 py-4 text-left lowercase transition-colors ${
                     active
                       ? "bg-[#d8d8d0]"
                       : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
                   }`}
-                  style={{ borderLeftColor: ROUTE_COLORS[index] }}
                 >
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-0 w-1"
+                    style={{ backgroundColor: ROUTE_COLORS[index] }}
+                  />
                   <span className="flex items-baseline justify-between gap-3 text-black">
-                    <span className="text-lg">overall score</span>
                     <span className="text-3xl font-bold">
                       {score == null ? <span className="text-base font-normal">unavailable</span> : <>{Math.round(score / 10)}<span className="ml-1 text-lg font-normal text-black/60">/10</span></>}
                     </span>
+                    <span className="text-lg text-black/60">overall score</span>
                   </span>
                   <span className="mt-3 block text-base text-black/80">
                     {formatDuration(route.properties.duration_minutes)} ({formatDistance(route.properties.distance_meters)})

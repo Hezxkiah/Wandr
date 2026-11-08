@@ -32,16 +32,6 @@ class PlaceIndex(osmium.SimpleHandler):
         if node.location.valid():
             self.add(node.tags, node.location.lon, node.location.lat)
 
-    def way(self, way):
-        locations = [node.location for node in way.nodes if node.location.valid()]
-        if locations:
-            self.add(
-                way.tags,
-                sum(location.lon for location in locations) / len(locations),
-                sum(location.lat for location in locations) / len(locations),
-            )
-
-
 def from_geojson(source):
     index = PlaceIndex()
     with source.open(encoding="utf-8") as stream:
@@ -68,7 +58,7 @@ def main():
     args = parser.parse_args()
     if args.input.name.endswith(".osm.pbf"):
         index = PlaceIndex()
-        index.apply_file(args.input, locations=True)
+        index.apply_file(args.input)
     else:
         index = from_geojson(args.input)
     args.output.parent.mkdir(parents=True, exist_ok=True)
