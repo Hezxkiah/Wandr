@@ -307,11 +307,11 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/places")
-def places(q: str = Query(min_length=2, max_length=200)):
+def places(q: str = Query(min_length=2, max_length=200), lat: float | None = Query(None, ge=-90, le=90), lon: float | None = Query(None, ge=-180, le=180)):
     query = q.strip()
     if len(query) < 2:
         return []
-    results = search_places(query)
+    results = search_places(query, lat=lat, lon=lon)
     if results is None:
         raise HTTPException(status_code=503, detail="Destination suggestions are unavailable; you can still enter a destination.")
     return results

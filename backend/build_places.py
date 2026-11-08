@@ -13,15 +13,16 @@ with source.open() as stream:
         try:
             feature = json.loads(line.lstrip("\x1e"))
             tags = feature.get("properties") or {}
-            name = tags.get("name")
+            name = tags.get("name") or tags.get("brand") or tags.get("name:en")
             address = " ".join(filter(None, [tags.get("addr:housenumber"), tags.get("addr:street")]))
-            if not tags.get("addr:housenumber") or not tags.get("addr:street"):
+            if not name and not (tags.get("addr:housenumber") and tags.get("addr:street")):
                 continue
             point = shape(feature["geometry"]).representative_point()
             if point.is_empty:
                 continue
             label = ", ".join(filter(None, [address, tags.get("addr:city"), tags.get("addr:state"), tags.get("addr:postcode")]))
-            key = (label.casefold(), round(point.y, 4), round(point.x, 4))
+            label = label or name
+            key = ((name or "").casefold(), label.casefold(), round(point.y, 4), round(point.x, 4))
             if key not in seen:
                 seen.add(key)
                 places.append({"label": label, "name": name or "", "lat": point.y, "lon": point.x})
