@@ -4,10 +4,11 @@ from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from scenery import index as scenery_index
+from places import search_places
 
 
 GRAPHHOPPER_URL = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989").rstrip("/")
@@ -279,6 +280,17 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/places")
+def places(q: str = Query(min_length=2, max_length=200)):
+    query = q.strip()
+    if len(query) < 2:
+        return []
+    results = search_places(query)
+    if results is None:
+        raise HTTPException(status_code=503, detail="Destination suggestions are unavailable; you can still enter a destination.")
+    return results
+
+
 @app.post("/route")
 async def create_route(request: RouteRequest) -> dict[str, Any]:
     resolved_end = request.end
@@ -327,6 +339,16 @@ async def create_route(request: RouteRequest) -> dict[str, Any]:
     unique_paths = deduplicate_paths(paths)
     if not unique_paths:
         raise HTTPException(status_code=502, detail="GraphHopper returned no route")
+
+    if request.mode == "point_to_point":
+        within_time = [path for path in unique_paths if float(path.get("time", 0)) / 60000 <= request.target_minutes]
+        if not within_time:
+            shortest = min(float(path.get("time", 0)) for path in unique_paths) / 60000
+            raise HTTPException(
+                status_code=422,
+                detail=f"This destination is outside the selected walking time. The shortest route found takes approximately {max(1, round(shortest))} minutes; choose more time or a closer destination.",
+            )
+        unique_paths = within_time
 
     # Prefer routes within the requested time; balance scenery, time fit and
     # approximate overlap within that group. Unknown scenery is neutral.
