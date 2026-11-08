@@ -1,24 +1,30 @@
-# Wandr
+# Wandr 🚶🌳
 
-Open three PowerShell terminals in the project folder and run one block in each.
+Take the scenic route! Wandr creates walking routes designed for relaxation and exploring your surroundings, based on your location and available time.
 
-## GraphHopper
 
-```powershell
-.\backend\start_graphhopper.ps1
+## Setup
+
+Run the following in three separate terminals.
+
+### GraphHopper
+Download the Texas `.osm.pbf` map from [Geofabrik](https://download.geofabrik.de/north-america/us/texas.html), then point your backend to its path.
+
+```
+.\backend\start_graphhopper.ps1 -MapFile "C:\path\to\texas-latest.osm.pbf"
 ```
 
-## Backend
+### Backend
 
-```powershell
+```
 cd backend
 .\.venv\Scripts\Activate.ps1
 python main.py
 ```
 
-## Frontend
+### Frontend
 
-```powershell
+```
 npm run dev
 ```
 
