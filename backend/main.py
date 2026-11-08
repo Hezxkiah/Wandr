@@ -1,11 +1,12 @@
+import math
 import os
+import random
 from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
 
 GRAPHHOPPER_URL = os.getenv("GRAPHHOPPER_URL", "http://localhost:8989").rstrip("/")
 GRAPHHOPPER_TIMEOUT_SECONDS = float(os.getenv("GRAPHHOPPER_TIMEOUT_SECONDS", "30"))
@@ -18,10 +19,17 @@ class Coordinate(BaseModel):
 
 class RouteRequest(BaseModel):
     start: Coordinate
-    end: Coordinate
+    end: Coordinate | None = None
     vibe: Literal["serenity", "discovery"] = "serenity"
     target_minutes: float = Field(30, gt=0, le=24 * 60)
 
+def generate_endpoint(start: Coordinate, meters: float) -> Coordinate:
+    # 1 degree lat ≈ 111,000 meters
+    # 1 degree lon ≈ 111,000 * cos(lat) meters
+    bearing = random.uniform(0, 2 * math.pi)
+    d_lat = (meters / 111000) * math.cos(bearing)
+    d_lon = (meters / 111000) * math.sin(bearing) / math.cos(math.radians(start.lat))
+    return Coordinate(lat=start.lat + d_lat, lon=start.lon + d_lon)
 
 # These models use attributes available in standard GraphHopper profiles. They
 # are intentionally kept server-independent: a model can only reference
@@ -84,8 +92,12 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/route")
-async def create_route(request: RouteRequest) -> dict[str, Any]:
+async def create_route(request: RouteRequest, time: int | None = None) -> dict[str, Any]:
     # GraphHopper POST points must be [longitude, latitude].
+    if request.end is None:
+        meters_one_way = (request.target_minutes * 80) / 2  # ~80 m/min walking
+        request.end = generate_endpoint(request.start, meters_one_way)
+    
     graphhopper_payload = {
         "points": [
             [request.start.lon, request.start.lat],
