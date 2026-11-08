@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SubmitEvent } from "react";
 import SiteHeader from "./components/site-header";
 import { ROUTES_STORAGE_KEY } from "./lib/routes";
 
 type WalkMode = "point_to_point" | "round_trip";
+type Place = { label: string; name?: string; lat: number; lon: number };
 
 function getCurrentLocation() {
   return new Promise<{ lat: number; lon: number }>((resolve, reject) => {
@@ -41,6 +42,46 @@ export default function Home() {
   const [mode, setMode] = useState<WalkMode>("round_trip");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [destination, setDestination] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [suggestions, setSuggestions] = useState<Place[]>([]);
+  const [suggestionStatus, setSuggestionStatus] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+
+  useEffect(() => {
+    const query = destination.trim();
+    if (mode !== "point_to_point" || selectedPlace || query.length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/places?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("unavailable");
+        const places: Place[] = await response.json();
+        if (!controller.signal.aborted) {
+          setSuggestions(places);
+          setSuggestionStatus(places.length ? "" : "No local address matches. You can still enter a full destination.");
+          setOpen(true);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setSuggestions([]);
+          setSuggestionStatus("Suggestions unavailable. You can still enter a destination.");
+          setOpen(true);
+        }
+      }
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [destination, mode, selectedPlace]);
+
+  function selectPlace(place: Place) {
+    setDestination(place.name ? `${place.name} — ${place.label}` : place.label);
+    setSelectedPlace(place);
+    setSuggestions([]);
+    setSuggestionStatus("");
+    setActiveIndex(-1);
+    setOpen(false);
+  }
 
   async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,7 +104,8 @@ export default function Home() {
         body: JSON.stringify({
           mode,
           start,
-          end_name: endName,
+          end_name: selectedPlace ? undefined : endName,
+          end: mode === "point_to_point" && selectedPlace ? { lat: selectedPlace.lat, lon: selectedPlace.lon } : undefined,
           vibe: "serenity",
           target_minutes: minutes,
         }),
@@ -126,16 +168,42 @@ export default function Home() {
         </div>
 
         {mode === "point_to_point" && (
-          <fieldset className="flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
+          <fieldset className="relative flex items-center gap-2 rounded-4xl bg-white px-5 py-3 lowercase">
             <legend className="sr-only">Destination</legend>
             <input
               type="text"
               name="end_name"
+              role="combobox"
               aria-label="Destination name or address"
+              aria-autocomplete="list"
+              aria-expanded={open}
+              aria-controls="destination-suggestions"
+              aria-activedescendant={activeIndex >= 0 ? `destination-option-${activeIndex}` : undefined}
               required
-              placeholder="a park, cafe, or address"
+              value={destination}
+              autoComplete="off"
+              onChange={(event) => { setDestination(event.target.value); setSelectedPlace(null); setSuggestions([]); setSuggestionStatus(""); setActiveIndex(-1); setOpen(false); }}
+              onFocus={() => { if (suggestions.length || suggestionStatus) setOpen(true); }}
+              onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && suggestions.length) { event.preventDefault(); setOpen(true); setActiveIndex((index) => Math.min(index + 1, suggestions.length - 1)); }
+                if (event.key === "ArrowUp" && suggestions.length) { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
+                if (event.key === "Enter" && open && activeIndex >= 0 && suggestions[activeIndex]) { event.preventDefault(); selectPlace(suggestions[activeIndex]); }
+                if (event.key === "Escape") { setOpen(false); setActiveIndex(-1); }
+              }}
+              placeholder="enter an address or place"
               className="w-56 rounded-lg border border-gray-300 px-3 py-2 normal-case placeholder:text-gray-400"
             />
+            {open && <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-3xl bg-white py-2 normal-case shadow-lg">
+              <ul id="destination-suggestions" role="listbox">
+                {suggestions.map((place, index) => <li key={`${place.lat}-${place.lon}-${place.label}`} id={`destination-option-${index}`} role="option" aria-selected={index === activeIndex} onMouseDown={(event) => event.preventDefault()} onClick={() => selectPlace(place)} className={`cursor-pointer px-5 py-2 text-sm ${index === activeIndex ? "bg-[#e8e8e1]" : "hover:bg-[#f3f3ed]"}`}>
+                  {place.name && <span className="block">{place.name}</span>}
+                  <span className={place.name ? "block text-xs text-black/60" : "block"}>{place.label}</span>
+                </li>)}
+              </ul>
+              {suggestionStatus && <p role="status" className="px-5 py-2 text-sm text-black/60">{suggestionStatus}</p>}
+              <p className="px-5 pt-1 text-xs text-black/50">Local results · © OpenStreetMap contributors</p>
+            </div>}
           </fieldset>
         )}
 

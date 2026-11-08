@@ -67,13 +67,18 @@ export default function WalkPage() {
     <SiteHeader />
     <div className="relative min-h-0 flex-1">
       <RouteMap routes={routes} selectedId={route.id} interactive={false} position={position} />
-      <section className="absolute inset-x-3 bottom-3 z-[500] max-h-[75%] overflow-y-auto rounded-3xl border-2 border-black bg-[#f6f0df] p-4 shadow-[5px_5px_0_#111] sm:inset-x-auto sm:bottom-5 sm:left-5 sm:w-[380px] sm:p-5">
-        <div className="mb-4 flex items-start justify-between gap-4"><p>{arrived ? "walk complete" : started ? "wandering now" : "ready when you are"}</p><Link href="/map" className="text-xs underline underline-offset-4">change</Link></div>
-        <div className="mb-4 grid grid-cols-3 gap-3 border-y border-black/20 py-3 text-sm"><p>{formatDuration(route.properties.duration_minutes)}</p><p>{formatDistance(Math.max(0, total - progress))} left</p><p>{Math.round(total ? progress / total * 100 : 0)}% complete</p></div>
-        {(started || arrived) && <div className="mb-4 rounded-2xl bg-white p-3" aria-live="polite"><p className="text-xs text-black/60">{simulate ? "simulated direction" : "current direction"}</p><p>{arrived ? "You have arrived." : instruction?.text ?? "Continue along the route."}</p>{!arrived && instructionEnd != null && <p className="text-xs">{formatDistance(Math.max(0, instructionEnd - progress))} until next instruction</p>}</div>}
+      <section className="absolute bottom-3 left-3 z-[500] max-h-[calc(100%-24px)] w-[min(350px,calc(100%-24px))] overflow-y-auto rounded-4xl bg-white p-4">
+        <div className="mb-4 flex items-center gap-3">
+          <Link href="/map" aria-label="Back to route options" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-black/5">
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          </Link>
+          <h1 className="text-2xl">{arrived ? "walk complete" : started ? "wandering now" : "ready when you are"}</h1>
+        </div>
+        <div className="mb-4 grid grid-cols-3 gap-3 rounded-4xl bg-[#f3f3ed] px-4 py-4 text-sm"><p>{formatDuration(route.properties.duration_minutes)}</p><p>{formatDistance(Math.max(0, total - progress))} left</p><p>{Math.round(total ? progress / total * 100 : 0)}% complete</p></div>
+        {(started || arrived) && <div className="mb-4 rounded-4xl bg-[#f3f3ed] px-4 py-3" aria-live="polite"><p className="mb-1 text-xs text-black/60">{simulate ? "simulated direction" : "current direction"}</p><p>{arrived ? "You have arrived." : instruction?.text ?? "Continue along the route."}</p>{!arrived && instructionEnd != null && <p className="mt-1 text-xs text-black/60">{formatDistance(Math.max(0, instructionEnd - progress))} until next instruction</p>}</div>}
         {message && <p role="status" className="mb-3 text-sm text-red-800">{message}</p>}
         {process.env.NODE_ENV === "development" && <fieldset className="mb-4 rounded-2xl border border-black/30 p-3 text-sm"><legend>Development simulator</legend><label className="flex gap-2"><input type="checkbox" checked={simulate} onChange={(e) => { setStarted(false); setSimulate(e.target.checked); setProgress(0); setPosition(null); setMessage(""); }} /> Simulate location (not GPS)</label>{simulate && <><label className="mt-2 block">Progress: {Math.round(total ? progress / total * 100 : 0)}%<input aria-label="Simulated route progress" className="w-full" type="range" min="0" max={total || 1} value={progress} onChange={(e) => setProgress(Number(e.target.value))} /></label><label>Speed <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}><option value={1}>1×</option><option value={10}>10×</option><option value={30}>30×</option><option value={60}>60×</option></select></label></>}</fieldset>}
-        <button type="button" onClick={() => { if (arrived) setProgress(0); setStarted((value) => arrived ? true : !value); }} className="w-full cursor-pointer rounded-full border-2 border-black bg-black px-5 py-3.5 text-white shadow-[4px_4px_0_#d95d39]">{arrived ? "restart walk" : started ? "pause walk" : "start walking →"}</button>
+        <button type="button" onClick={() => { if (arrived) setProgress(0); setStarted((value) => arrived ? true : !value); }} className="w-full cursor-pointer rounded-4xl bg-black px-8 py-4 text-white hover:bg-neutral-800">{arrived ? "restart walk" : started ? "pause walk" : "start walking →"}</button>
       </section>
     </div>
   </main>;
