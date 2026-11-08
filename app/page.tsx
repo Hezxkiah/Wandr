@@ -201,7 +201,7 @@ export default function Home() {
               type="button"
               onClick={() => chooseStart(null)}
               className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                start === null ? "bg-neutral-700 text-white" : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
+                start === null ? "bg-olive-600 text-white" : "bg-[#f3f3ed] hover:bg-[#e8e8e1]"
               }`}
             >
               Use my location
