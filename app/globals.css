@@ -1,8 +1,15 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+@font-face {
+  font-family: "Iosevka Bold";
+  src: url("/fonts/IosevkaCharonMono-Bold.ttf");
+  font-display: swap;
 }
 
 @theme inline {
@@ -12,15 +19,28 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
-}
+} */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Iosevka Bold, Arial, Helvetica, sans-serif;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+.maplibregl-map {
+  font-family: Iosevka Bold, Arial, Helvetica, sans-serif;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 9px;
 }

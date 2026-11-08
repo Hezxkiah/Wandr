@@ -33,6 +33,18 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local Python environment
+/backend/.venv/
+__pycache__/
+*.py[cod]
+
+# GraphHopper runtime artifacts (if generated inside this repository)
+*.osm.pbf
+graphhopper-web-*.jar
+graph-cache/
+srtmprovider/
+graphhopper*.log
+
 # vercel
 .vercel
 
