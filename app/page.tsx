@@ -8,7 +8,7 @@ import SiteHeader from "./components/site-header";
 import { ROUTES_STORAGE_KEY } from "./lib/routes";
 
 type WalkMode = "point_to_point" | "round_trip";
-type Place = { name: string; label: string; lat: number; lon: number; distance_km?: number | null };
+type Place = { name: string; label: string; lat: number; lon: number; walking_minutes: number };
 
 const PRESET_LOCATIONS: { label: string; lat: number; lon: number }[] = [
   { label: "Austin, TX", lat: 30.2672, lon: -97.7431 },
@@ -38,6 +38,7 @@ function getCurrentLocation() {
 export default function Home() {
   const router = useRouter();
   const [mode, setMode] = useState<WalkMode>("round_trip");
+  const [duration, setDuration] = useState(15);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [start, setStart] = useState<{ lat: number; lon: number } | null>(null);
@@ -70,27 +71,33 @@ export default function Home() {
     let disposed = false;
     const timer = window.setTimeout(async () => {
       const params = new URLSearchParams({ q: destination.trim() });
-      if (start) { params.set("lat", String(start.lat)); params.set("lon", String(start.lon)); }
+      params.set("target_minutes", String(duration));
       setSearchStatus("Searching places…");
-      const timeout = window.setTimeout(() => controller.abort("timeout"), 10_000);
+      const timeout = window.setTimeout(() => controller.abort("timeout"), 20_000);
       try {
+        const origin = start ?? await getCurrentLocation();
+        if (disposed || controller.signal.aborted) return;
+        params.set("lat", String(origin.lat)); params.set("lon", String(origin.lon));
         const response = await fetch(`http://localhost:8000/places?${params}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("Search unavailable");
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || "Place search is unavailable.");
+        }
         const places: Place[] = await response.json();
         if (disposed || controller.signal.aborted) return;
         setSuggestions(places);
-        setSearchStatus(places.length ? "" : "No local matches. Try a place name or full address.");
-      } catch {
+        setSearchStatus(places.length ? "" : `No matching places reachable within ${duration} minutes. Try another place or a longer walk.`);
+      } catch (error) {
         if (!disposed && (!controller.signal.aborted || controller.signal.reason === "timeout")) {
           setSuggestions([]);
-          setSearchStatus(controller.signal.reason === "timeout" ? "Place search timed out. Please try again." : "Place search is unavailable. Check that the backend is running.");
+          setSearchStatus(controller.signal.reason === "timeout" ? "Place search timed out. Please try again." : error instanceof Error ? error.message : "Place search is unavailable. Check that the backend is running.");
         }
       } finally {
         window.clearTimeout(timeout);
       }
     }, 250);
     return () => { disposed = true; window.clearTimeout(timer); controller.abort(); };
-  }, [destination, mode, selectedPlace, start]);
+  }, [destination, mode, selectedPlace, start, duration]);
 
   async function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,6 +113,7 @@ export default function Home() {
         : undefined;
 
     try {
+      if (mode === "point_to_point" && !selectedPlace) throw new Error("Choose a destination from the suggestions first.");
       const startCoord = start ?? (await getCurrentLocation());
       const response = await fetch("http://localhost:8000/route", {
         method: "POST",
@@ -161,7 +169,15 @@ export default function Home() {
             <select
               id="duration"
               name="duration"
-              defaultValue="15"
+              value={duration}
+              onChange={(event) => {
+                setDuration(Number(event.target.value));
+                if (selectedPlace) setDestination(selectedPlace.name || selectedPlace.label);
+                setSelectedPlace(null);
+                setSuggestions([]);
+                setSearchStatus("");
+                setActiveOption(-1);
+              }}
               className="mx-3 cursor-pointer rounded-lg border border-gray-300 px-2 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
             >
               {[5, 10, 15, 20, 30, 45].map((minutes) => (
@@ -258,7 +274,9 @@ export default function Home() {
                       <button type="button" tabIndex={-1} onPointerDown={(event) => event.preventDefault()} onClick={() => selectPlace(place)} className={`w-full cursor-pointer rounded-2xl px-4 py-3 text-left ${activeOption === index ? "bg-[#e8e8e1]" : "hover:bg-[#f3f3ed]"}`}>
                         <span className="block">{place.name || place.label}</span>
                         {place.name && place.label !== place.name && <span className="mt-1 block text-sm text-black/60">{place.label}</span>}
-                        {place.distance_km != null && <span className="mt-1 block text-xs text-black/60">{place.distance_km} km from start</span>}
+                        <span className="mt-1 block text-sm text-black/70">
+                          {place.walking_minutes} minutes away on foot
+                        </span>
                       </button>
                     </li>
                   ))}

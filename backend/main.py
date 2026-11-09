@@ -1,6 +1,6 @@
 import asyncio
 import os
-from math import asin, cos, radians, sin, sqrt
+from math import asin, ceil, cos, radians, sin, sqrt
 from typing import Any, Literal
 
 import httpx
@@ -307,14 +307,40 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/places")
-def places(q: str = Query(min_length=2, max_length=200), lat: float | None = Query(None, ge=-90, le=90), lon: float | None = Query(None, ge=-180, le=180)):
+async def places(q: str = Query(min_length=2, max_length=200), lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180), target_minutes: float = Query(15, gt=0, le=1440)):
     query = q.strip()
     if len(query) < 2:
         return []
-    results = search_places(query, lat=lat, lon=lon)
+    results = await asyncio.to_thread(search_places, query, limit=16, lat=lat, lon=lon)
     if results is None:
         raise HTTPException(status_code=503, detail="Destination suggestions are unavailable; you can still enter a destination.")
-    return results
+    if not results:
+        return []
+    semaphore = asyncio.Semaphore(4)
+    async with httpx.AsyncClient(base_url=GRAPHHOPPER_URL, timeout=4) as client:
+        async def check(place):
+            request = RouteRequest(start=Coordinate(lat=lat, lon=lon), target_minutes=target_minutes)
+            payload = {**common_payload(request), "points": [[lon, lat], [place["lon"], place["lat"]]], "instructions": False, "calc_points": False, "details": []}
+            async with semaphore:
+                try:
+                    response = await client.post("/route", json=payload)
+                    response.raise_for_status()
+                    paths = response.json().get("paths") or []
+                    minutes = min(float(path["time"]) / 60000 for path in paths) if paths else None
+                    if minutes is not None and minutes <= target_minutes:
+                        return {**place, "walking_minutes": max(1, ceil(minutes))}, True
+                    return None, True
+                except httpx.HTTPStatusError as exc:
+                    # Unroutable/out-of-map destinations should never be offered.
+                    if exc.response.status_code == 400:
+                        return None, True
+                    return None, False
+                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                    return None, False
+        checked = await asyncio.gather(*(check(place) for place in results))
+    if not any(success for _, success in checked):
+        raise HTTPException(status_code=503, detail="Walking-time search is unavailable. Check that GraphHopper is running.")
+    return [place for place, _ in checked if place is not None][:8]
 
 
 def walk_context(request: NarrationRequest) -> dict[str, Any]:
