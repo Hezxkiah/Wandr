@@ -1,111 +1,273 @@
 # Wandr 🚶🌳
 
-Take the scenic route! Wandr creates walking routes designed for relaxation and exploring your surroundings, based on your location and available time.
+Take the scenic route. Wandr suggests walking routes based on your starting location, available time, and whether you want to return to your start or end somewhere new. Compare routes by mapped scenery and quieter roads, then explore with directions and location-aware companion messages.
 
+## What you can do
 
-## Local development
+- Choose your current location or an Austin/Dallas starting point.
+- Generate a round-trip walk or search for a destination reachable within your time limit.
+- Compare up to three routes with integer walk scores out of 10.
+- Switch between simple and satellite maps.
+- Test a walk with the development simulator: play, pause, change speed, and scrub along the route.
 
-Wandr has three local services. Run each in a separate terminal:
+This guide sets up **Texas-wide coverage**, including Austin, Dallas, and College Station. Coverage comes from the map you import; selecting a city in the interface does not download its map.
 
-| Service | Address | Purpose |
+## Architecture
+
+You need **three services running in separate terminals**:
+
+| Service | Local address | Role |
 | --- | --- | --- |
-| GraphHopper | `http://localhost:8989` | Generates pedestrian routes from OpenStreetMap data. |
-| FastAPI backend | `http://localhost:8000` | Adds Wandr's route selection, scoring, and destination lookup. |
-| Next.js frontend | `http://localhost:3000` | The browser interface. |
+| GraphHopper 11.1 / Java | `http://localhost:8989` | Pedestrian routing, walking times, and directions |
+| FastAPI / Python | `http://localhost:8000` | Destination search, route selection, scoring, and narration |
+| Next.js / React | `http://localhost:3000` | Browser interface and MapLibre maps |
 
-Before starting, install Java 25 or newer and download GraphHopper 11.1 and an OpenStreetMap extract. These external assets are not committed. The local launcher defaults to a Plano–UTD extract; the backend geocoder is bounded to Texas.
+The frontend uses TypeScript and Tailwind CSS. The backend uses SQLite full-text search for destinations and Shapely for nearby scenery. OpenStreetMap supplies the underlying geographic data. An OpenAI API key is optional; local companion messages work without one.
 
-The backend requires Python 3.10 or newer.
+## Prerequisites
 
-### GraphHopper
+- Git and npm.
+- Node.js **20.9 or newer**.
+- Python **3.10 or newer**; Python 3.12 is used in the macOS instructions below.
+- Java **25 or newer**.
+- The **`osmium` command-line tool** (`osmium-tool`). The Python package of the same name does not replace this command.
+- Internet access for downloads, map tiles, and optional LLM narration.
+- Enough free disk space and memory for the map, routing cache, scenery file, and destination index. Statewide processing is substantially heavier than a small city extract; the first import can take a while.
 
-For the Plano–UTD development map, install `osmium-tool` and create an extract from Geofabrik's Texas data:
+### macOS
 
-```bash
-mkdir -p backend/.graphhopper
-curl -fL https://repo1.maven.org/maven2/com/graphhopper/graphhopper-web/11.1/graphhopper-web-11.1.jar -o backend/.graphhopper/graphhopper-web-11.1.jar
-curl -fL https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf -o backend/.graphhopper/texas-source.osm.pbf
-osmium extract --bbox=-96.95,32.94,-96.60,33.15 --strategy=complete_ways --output backend/.graphhopper/plano-utd.osm.pbf backend/.graphhopper/texas-source.osm.pbf
-```
-
-This bounded map covers Plano and UTD, not the entire Dallas area. The Texas source file can be removed after extraction to reclaim disk space. The launcher uses a separate cache for this extract.
-
-The repository includes a Windows PowerShell helper. Update its `GraphHopperHome`, `JavaExecutable`, and `MapFile` defaults, or provide those values explicitly:
-
-```powershell
-.\backend\start_graphhopper.ps1 -MapFile "C:\path\to\utd.osm"
-```
-
-macOS/Linux after placing the JAR and map file in `backend/.graphhopper/`:
+With Homebrew installed:
 
 ```bash
-./backend/start_graphhopper.sh
+brew install node python@3.12 openjdk@25 osmium-tool
+export PATH="$(brew --prefix openjdk@25)/bin:$PATH"
 ```
 
-GraphHopper should be ready when this succeeds:
+Check the installed tools:
 
 ```bash
-curl http://localhost:8989/info
+node --version
+npm --version
+python3.12 --version
+java -version
+osmium --version
 ```
 
-### Backend
+### Linux and Windows
 
-macOS/Linux:
+On Linux, install the prerequisites using your distribution's package manager or vendor installers. Use `python3` below if that is your Python 3.10+ executable, and make sure Java 25+ is on `PATH`.
+
+On Windows, use **WSL2** for the complete Bash-based workflow in this guide, including data preparation. Install the prerequisites and clone the project inside WSL. The repository also contains a native PowerShell GraphHopper helper, but its machine-specific defaults must be changed, and the data-building scripts expect a Unix-style Python environment.
+
+## One-time setup
+
+### 1. Clone and install dependencies
+
+```bash
+git clone https://github.com/Hezxkiah/Wandr.git
+cd Wandr
+npm ci
+```
+
+Create the backend environment:
 
 ```bash
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+cd ..
+```
+
+For Linux/WSL, substitute `python3` for `python3.12` if appropriate. Keep the environment at `backend/.venv`: the data-building scripts use that path.
+
+### 2. Download GraphHopper and the Texas map
+
+Run from the repository root:
+
+```bash
+mkdir -p backend/.graphhopper
+
+curl -fL https://repo1.maven.org/maven2/com/graphhopper/graphhopper-web/11.1/graphhopper-web-11.1.jar \
+  -o backend/.graphhopper/graphhopper-web-11.1.jar
+
+curl -fL https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf \
+  -o backend/.graphhopper/texas-source.osm.pbf
+```
+
+These downloads are not included in a Git clone. If you already have these files, skip the downloads. Keep `texas-source.osm.pbf` for future data rebuilds.
+
+### 3. Build scenery and searchable destinations
+
+From the repository root, after the downloads finish:
+
+```bash
+bash backend/build_scenery.sh backend/.graphhopper/texas-source.osm.pbf
+bash backend/build_places.sh backend/.graphhopper/texas-source.osm.pbf
+```
+
+Wait for both commands to finish. They generate:
+
+| File | Used for |
+| --- | --- |
+| `backend/.graphhopper/scenery.geojsonseq` | Scenery scores and nearby named landscape features |
+| `backend/.graphhopper/places.json` | Intermediate destination index |
+| `backend/.graphhopper/places.sqlite` | Fast destination autocomplete |
+
+**Pass the Texas map path explicitly.** The build scripts still default to a smaller Plano–UTD extract when no argument is supplied.
+
+### 4. Start the three services
+
+Follow the startup commands below. The first GraphHopper launch builds `backend/.graphhopper/texas-cache`. Wait for the import to finish before generating walks. Later launches reuse that cache.
+
+## Start or restart the app
+
+Replace `/path/to/Wandr` below with your own repository path. If a service is already running, press **Ctrl+C in its existing terminal** before starting another copy.
+
+### Terminal 1 — GraphHopper
+
+```bash
+cd /path/to/Wandr/backend
+
+java \
+  -Ddw.graphhopper.datareader.file=.graphhopper/texas-source.osm.pbf \
+  -Ddw.graphhopper.graph.location=.graphhopper/texas-cache \
+  -jar .graphhopper/graphhopper-web-11.1.jar \
+  server graphhopper.yml
+```
+
+On macOS, if `java -version` does not show Java 25+, run this in the same terminal first:
+
+```bash
+export PATH="$(brew --prefix openjdk@25)/bin:$PATH"
+```
+
+Use the explicit command above for Texas. The existing `start_graphhopper.sh` defaults to the older Plano–UTD map and cache.
+
+### Terminal 2 — Python backend
+
+```bash
+cd /path/to/Wandr/backend
+source .venv/bin/activate
+export WANDR_SCENERY_BOUNDS="-106.646,25.837,-93.508,36.501"
 uvicorn main:app --reload --port 8000
 ```
 
-Windows PowerShell:
+Wait for **Application startup complete**. Loading statewide scenery can take time. Set the bounds in each new backend terminal; changing an environment variable in another terminal does not affect the running backend.
 
-```powershell
-cd backend
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-Verify the backend is running (this endpoint does not check GraphHopper):
+### Terminal 3 — Website
 
 ```bash
-curl http://localhost:8000/health
-```
-
-### Frontend
-
-```bash
+cd /path/to/Wandr
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open [http://localhost:3000](http://localhost:3000). Keep all three service terminals running.
 
-## End-to-end smoke test
+### Verify readiness
 
-1. Open `http://localhost:3000` and allow location access.
-2. Choose a duration and test a round-trip walk.
-3. Confirm route options render on `/map`, switch between the simple and satellite map styles, and select a route.
-4. Continue to `/walk`, start the walk, and confirm the first direction appears.
-5. Return home and repeat with **end up at** using a fully qualified destination inside the loaded map area, for example `The University of Texas at Dallas, Richardson, Texas`.
+In an additional terminal:
 
-If the route request fails, check the FastAPI terminal first. Common causes are GraphHopper not running, the selected location being outside the downloaded OSM area, or location permission being denied.
+```bash
+curl http://localhost:8989/info
+curl http://localhost:8000/health
+```
 
-## Mapped scenery and walk testing
+`/info` should return GraphHopper map information. `/health` should return `{"status":"ok"}`, but it checks only FastAPI—not GraphHopper or the generated indexes. A visible homepage alone does not mean routing is ready.
 
-Destination autocomplete uses the full-text SQLite database `backend/.graphhopper/places.sqlite`, generated by `build_places.sh`. To upgrade an existing JSON index without extracting the map again, run `backend/.venv/bin/python backend/index_places.py backend/.graphhopper/places.json backend/.graphhopper/places.sqlite`. If configured, `WANDR_PLACES_FILE` must point to the SQLite database. Search queries use this index instead of scanning every JSON record; the frontend times out stalled requests after 20 seconds, including walking-time checks.
+**You do not download or rebuild everything on each restart.** Reuse the JAR, map, generated indexes, and routing cache. Rebuild when you change or update the map. Use a new routing cache directory when changing map coverage; a previous cache can keep serving the old region.
 
-Simulated walk popups refresh on changes to a roughly block-sized coordinate cell or each 150 m of route progress, including when scrubbing while paused. `/walk-context` supplies immediate local landmark text; optional `/narration` generation enriches it without delaying that update. For Austin–Dallas routes, rebuild the scenery index with `bash backend/build_scenery.sh backend/.graphhopper/austin-dallas.osm.pbf`, then restart FastAPI to load it. The scenery builder safely replaces the previous generated index. Nearby names are sourced from the loaded OSM extract; named landmarks outside that extract cannot appear.
+## Using Wandr
 
-Route cards show an integer walk score out of 10, combining the scenery score (65%) with quieter-road coverage (35%). Quiet coverage is estimated from mapped road classes, not live traffic. If one component is unavailable, the score uses only the available component and the card states that limitation. Missing data is distinct from measured zero coverage. Options are sorted by the unrounded combined score, so equal displayed integers can still have a consistent order. Candidate selection balances time fit (60%) with combined walk quality (40%) and route diversity.
+1. Choose **Use my location**, **Austin**, or **Dallas**. Allow location access when prompted if using GPS.
+2. Select your available walking time.
+3. Choose **come back here** for a loop, or **end up at** for a destination walk.
+4. For a destination walk, type a place name or address and select a suggestion. Click a result, or use the arrow keys and Enter. Each result shows **X minutes away on foot**, based on a GraphHopper route estimate. Only checked destinations within your selected duration appear.
+5. Click **go!**, compare the route cards, and choose a route.
+6. Click **let's go!** to open the walk screen, then **start walking**.
 
-After creating the Plano–UTD extract, run `bash backend/build_scenery.sh` and restart the backend. It filters OpenStreetMap features and writes an ignored local GeoJSON sequence. Set `WANDR_SCENERY_FILE` and `WANDR_SCENERY_BOUNDS` (west,south,east,north) when using a different extract. Without usable data or outside the configured bounds, scenery is reported as unavailable.
+Changing the starting point or duration clears a selected destination so its eligibility can be checked again. Search needs both the backend and GraphHopper, and it searches a limited candidate set rather than promising every possible matching destination. Starting the walk rechecks routing because estimates and positions can change.
 
-For destination suggestions covering Austin and Dallas, run `bash backend/build_places.sh backend/.graphhopper/austin-dallas.osm.pbf` after installing the backend dependencies and `osmium-tool`. This creates an ignored local index of mapped addresses and named businesses, cafés, parks, and attractions. Search uses the selected start or requests GPS permission. `/places` requires starting `lat` and `lon`, and accepts `target_minutes`. It checks up to 16 local matches with GraphHopper (four concurrent checks), excludes unroutable or over-budget destinations, and returns up to eight with `walking_minutes` rounded up. GraphHopper must be running for destination suggestions. Click a result or use arrow keys and Enter to select its exact mapped point; the UI requires a selection before submitting. Editing the destination, changing the start, or changing the duration clears the selection. Suggestions cover only the loaded extract and may omit places. Set `WANDR_PLACES_FILE` to use a different generated SQLite index. Route submission rechecks the duration because routing estimates and starting positions can change.
+For a demo without physically walking, run `npm run dev`, enable **Development simulator**, and start the walk. You can pause, change the speed, or scrub progress. The black circle marks the simulated walker. Landmark messages refresh along the route and remain visible when paused. The simulator and its landmark-message flow are development features; the simulator is hidden in production builds.
 
-Routes are sampled approximately every 25 m. Segments within 80 m of parks or water, 30 m of mapped trees/woods, or 50 m of viewpoints contribute to category proximity. The scenery score blends 50% strongest-category coverage with 50% weighted coverage (park 40%, water 30%, trees 20%, viewpoint 10%), then applies `100 * coverage^0.75`. This rewards routes with one strong scenic quality and gives partial coverage more credit; no mapped scenery still scores zero. For example, full park coverage scores 77/100 instead of 40/100. Displayed proximity percentages remain unchanged. These are map-based approximations, not verified views, live traffic, or guarantees of access. Missing or incompletely mapped features can bias scores. Ranking prefers candidates within the requested time, then combines time fit (60%), scenery (40%), and a penalty for approximate overlap. When scenery is unavailable, it is neutral. Candidate generation itself still uses GraphHopper's walking model.
+GPS progress tracking is also available. Poor accuracy or being more than 50 m off-route pauses progress. Matching and directions are approximate, particularly at intersections and overlapping paths.
 
-On the walk screen in `npm run dev`, enable **Development simulator** to play, pause, change speed, or scrub a simulated position. Production builds do not expose this switch; it is not an authenticated admin role. GPS progress pauses for poor accuracy or when more than 50 m off-route. Progress and turn detection are approximate, especially on overlapping paths; verify conditions on the ground.
+## Optional AI narration
+
+Local messages do not need an API key. To enable OpenAI-generated wording, set the key **in the backend terminal before starting FastAPI**:
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+export OPENAI_NARRATION_MODEL="gpt-4.1-mini"
+uvicorn main:app --reload --port 8000
+```
+
+Use your own API account; API usage may be billed. Keep the key on the backend and out of Git. The backend reads exported environment variables; it does not automatically load a `.env` file.
+
+`/walk-context` returns immediate local landmark text. Optional `/narration` requests add generated wording using that context. Requests fall back to local text when generation is unavailable. Landmarks come from the loaded map, so missing map features can lead to general walking prompts.
+
+## How the scores and routing work
+
+- GraphHopper uses OpenStreetMap with a pedestrian profile. The default serenity custom model discourages major roads and tunnels.
+- Round trips request eight seeded candidates; destination walks request up to five alternatives. Wandr removes duplicates and selects up to three options using time fit, walk quality, and a route-overlap penalty.
+- The displayed **overall walk score** combines **65% mapped scenery** with **35% quieter-road coverage**, then converts to a rounded integer out of 10. When one component is unavailable, only the available component contributes. Options are sorted by the unrounded combined score.
+- Scenery is sampled approximately every 25 m. Proximity thresholds are 80 m for parks/water, 30 m for trees, and 50 m for viewpoints. The score blends the strongest category with weighted category coverage, then applies a curve that gives partial coverage more credit.
+- Quieter roads are estimated from mapped road classes such as footways and residential streets. This is **not live traffic measurement**. Scenery proximity does not guarantee a view or public access.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `next: command not found` | Run `npm ci` in the repository root before `npm run dev`. |
+| `GraphHopper is unavailable` | Check Terminal 1 and `curl http://localhost:8989/info`. The map may still be importing or startup may have failed. |
+| `Address already in use` / `Failed to bind` | Another service is using the port. Stop the old GraphHopper terminal before launching the Texas version. On macOS/Linux, `lsof -nP -iTCP:8989 -sTCP:LISTEN` identifies the listener. GraphHopper also uses admin port 8990. |
+| `Cannot find point 0` / `Point 0 is out of bounds` | Confirm the running GraphHopper uses `texas-source.osm.pbf` **and** `texas-cache`. An older regional process/cache may still be active. If coverage is correct, the GPS point may not be near a routable pedestrian segment. |
+| Java JAR or OSM map missing | Complete the downloads and start Java from `backend`, as shown above. |
+| `Suggestions unavailable` / no destination results | Finish building `places.sqlite`; check both backend and GraphHopper. Try a longer walk or a more specific query. Places outside the time limit are excluded. |
+| Search stays on `Searching places…` | Wait for backend startup, check its terminal, and retry. The frontend reports a timeout after 20 seconds. |
+| Scenery unavailable / generic popups | Build scenery from the same Texas map, export the Texas bounds, and restart FastAPI. It loads scenery when it starts. |
+| No simulator | Use `npm run dev`; production builds hide it. |
+| Location denied or unavailable | Allow browser/OS location permission, use localhost locally, or choose Austin/Dallas for a demo. |
+
+If your old setup only has `places.json`, build the fast search database without extracting the map again:
+
+```bash
+cd /path/to/Wandr
+backend/.venv/bin/python backend/index_places.py \
+  backend/.graphhopper/places.json \
+  backend/.graphhopper/places.sqlite
+```
+
+## Configuration
+
+Export these in the backend terminal before starting it:
+
+| Variable | Purpose |
+| --- | --- |
+| `WANDR_SCENERY_BOUNDS` | Scenery coverage as **west,south,east,north**; use the Texas value shown above. The code default is still Plano–UTD. |
+| `WANDR_SCENERY_FILE` | Override the generated scenery GeoJSON sequence path. |
+| `WANDR_PLACES_FILE` | Override the destination **SQLite** database path. |
+| `GRAPHHOPPER_URL` | Routing server; defaults to `http://localhost:8989`. |
+| `GRAPHHOPPER_TIMEOUT_SECONDS` | Main route-generation timeout; defaults to 30 seconds. Autocomplete uses shorter per-route checks. |
+| `OPENAI_API_KEY` | Optional narration key. |
+| `OPENAI_NARRATION_MODEL` | Optional narration model; defaults to `gpt-4.1-mini`. |
+
+The fallback geocoder is bounded to Texas and can be configured through the `GEOCODER_*` variables in `backend/main.py`. The frontend currently calls `http://localhost:8000` directly, and CORS allows local frontend origins. Public hosting or phone access needs API URL, CORS, and HTTPS configuration; these instructions are for local development.
+
+## Development checks
+
+From the repository root:
+
+```bash
+npm run lint
+npm run build
+backend/.venv/bin/python -B -m unittest discover -s backend -p 'test_*.py'
+```
+
+For a manual smoke test, generate a loop, compare route options and both map styles, then start and pause a simulated walk. Also search for a destination, confirm its walking time fits the duration, and verify changing the duration refreshes results.
+
+## What belongs in Git
+
+Commit source code, documentation, and tests. Do not commit `node_modules`, Python virtual environments/bytecode, API keys, map downloads, GraphHopper JARs/caches, or generated scenery/destination indexes. The local runtime assets in `backend/.graphhopper/` are ignored, so other contributors must complete the one-time setup after cloning.
+
+Map data © OpenStreetMap contributors, available under the ODbL. Basemap tiles and satellite imagery have their own providers and attribution, displayed on the map. Routing/search data is local after setup; online map tiles and optional external geocoding/narration still require network access.
